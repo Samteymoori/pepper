@@ -10,6 +10,7 @@
 #include <set>
 #include <stdio.h>
 #include <string>
+#include <string.h>
 #include <vector>
 #include <map>
 #include <algorithm>
@@ -17,6 +18,7 @@
 #include "hts.h"
 #include "cram.h"
 #include "hts_endian.h"
+#include <stdlib.h>
 
 using namespace std;
 
@@ -108,6 +110,11 @@ struct type_read{
     vector <int> base_qualities;
     int read_id;
     int hp_tag;
+    string methylation;
+    vector <uint8_t> methylation_probability;
+    vector <int> methylation_position;
+    vector <int> methylation_position_A;
+    vector <int> methylation_position_C;
 
     void set_read_id(int id) {
         this->read_id = id;

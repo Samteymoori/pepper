@@ -122,6 +122,9 @@ vector<type_read> BAM_handler::get_reads(string chromosome,
 //    stop += 0;
 
     vector <type_read> all_reads;
+    string methylation;
+
+
 
     // get the id of the chromosome
     const int tid = bam_name2id(this->header, chromosome.c_str());
@@ -132,7 +135,12 @@ vector<type_read> BAM_handler::get_reads(string chromosome,
     // initialize an alignment
     bam1_t* alignment = bam_init1();
 
+
     while(sam_itr_next(this->hts_file, iter, alignment) >= 0) {
+        vector <uint8_t> methylation_probability;
+        //vector <int> methylation_position;
+        vector <int> methylation_position_A;
+        vector <int> methylation_position_C;
         //get read flags
         type_read_flags read_flags = get_read_flags(alignment->core.flag);
 
@@ -380,7 +388,79 @@ vector<type_read> BAM_handler::get_reads(string chromosome,
                 }
                     break;
                     // Z and H are null-terminated strings.
-                case 'Z':
+                case 'Z': {
+                    char *value = reinterpret_cast<char *>(s);
+
+                    if (tag == "Mm") {
+                        methylation = value;
+
+
+                        // Vector of integer to save tokens
+                        vector <string> tokens;
+
+
+                        // stringstream class check1
+                        stringstream check1(methylation);
+
+                        string intermediate;
+                        string intermediate_forbase;
+
+                        //std::cout << "methyl:::"<<methylation << "End. \n";
+                        // Tokenizing w.r.t. space ' '
+                        while (getline(check1, intermediate, ';')) {
+                            tokens.push_back(intermediate);
+
+                            //std::cout << "\n intermediate:"<<intermediate<< "\n";
+                            int position = 0;
+                            stringstream check2(intermediate);
+                            // int inner_while_counter = 0;
+                           // int p = 0;
+                            //std::cout << "##" << p << " - " << methylation_position.size() << "\n";
+                            int methylation_base_A_C=0; // for base A will be 1 and for C 2
+                            while (getline(check2, intermediate_forbase, ',')) {
+                                //std::cout << "##" << intermediate_forbase << "\n";
+                                if (methylation_base_A_C==0){
+                                    if (intermediate_forbase=="A+a"){
+                                        methylation_base_A_C=1;
+                                    }
+
+                                    else if (intermediate_forbase=="C+m"){
+                                        methylation_base_A_C=2;
+                                    }
+                                }
+
+
+                                else if (methylation_base_A_C==1){
+                                    position += stoi(intermediate_forbase) + 1;
+                                    methylation_position_A.push_back(position);
+                                }
+                                else if (methylation_base_A_C==2){
+                                    position += stoi(intermediate_forbase) + 1;
+                                    methylation_position_C.push_back(position);
+                                }
+
+
+
+                               // if (inner_while_counter > 0) {
+                                 //   position += stoi(intermediate_forbase) + 1;
+                                 //   methylation_position.push_back(position);
+                                //    p++;
+                                //}
+
+                               // inner_while_counter = 1;
+
+                            }
+                           // std::cout << "###" << p << " - " << methylation_position.size() << "\n";
+                        }
+                    }
+                    for (; s < aux_end && *s; ++s) {}  // Loop to the end.
+                    if (s >= aux_end) {
+                        tag_state_ok = false;
+                        cerr << "INVALID TAG: " << tag << endl;
+                    }
+                    s++;
+                }
+                    break;
                 case 'H': {
                     char *value = reinterpret_cast<char *>(s);
                     for (; s < aux_end && *s; ++s) {}  // Loop to the end.
@@ -399,6 +479,32 @@ vector<type_read> BAM_handler::get_reads(string chromosome,
                     break;
                     // B is an array of atomic types (strings, ints, floats).
                 case 'B': {
+                    //std::cout << tag;
+
+
+                    if (tag =="Ml") {
+                        s++;
+                        int *integer_p = reinterpret_cast<int *>(s);
+                        int number_of_integer = *integer_p;
+                        uint8_t *value;
+                        s += 4;
+
+                        for (int i=0; i < number_of_integer; i++){
+
+                            value = reinterpret_cast<uint8_t *>(s);
+                            methylation_probability.push_back(*value);
+                            s++;
+                        }
+                        //std::cout << "@#" << number_of_integer << " ? " << methylation_probability.size() << "\n";
+                        //for (; s < aux_end && *s; ++s) {}  // Loop to the end.
+                        /*if (s >= aux_end) {
+                            tag_state_ok = false;
+                            cerr << "INVALID TAG: " << tag << endl;
+                        }*/
+                        s++;
+                        break;
+                    }
+
                     if (tag == "HP")
                         cerr << "HP TAG HAS INVALID TYPE: " << tag_type << " " << query_name << endl;
 
@@ -426,9 +532,48 @@ vector<type_read> BAM_handler::get_reads(string chromosome,
                 }
             }
         }
+        /*
+        s = bam_get_aux(alignment);
+        tag_state_ok=true;
+        //std::cout << (int) (aux_end-s) << "\n";
+
+        while (aux_end - s >= 4 && tag_state_ok) {
+            // Each block is encoded like (each element is a byte):
+            // [tag char 1, tag char 2, type byte, ...]
+            // where the ... contents depends on the 2-character tag and type.
+            const string tag = string(reinterpret_cast<char *>(s), 2);
+            s += 2;
+            const uint8_t tag_type = *s++;
+            //std::cout << (int) (aux_end-s) << "\n";
+            //std::cout <<  "#" << tag_type << "\n";
+            switch (tag_type) {
+
+                    // Z is null-terminated strings.
+                case 'Z': {
+                    char *value = reinterpret_cast<char *>(s);
+                    methylation = value;
+                    for (; s < aux_end && *s; ++s){}  // Loop to the end.
+                    if (s >= aux_end) {
+                        tag_state_ok = false;
+                        cerr << "INVALID TAG: " << tag << endl;
+                    }
+                    s++;
+                }
+                    break;
+
+                default: {
+                    //tag_state_ok = false;
+                    break;
+                }
+            }
+        }*/
 
         // set all fetched attributes
         type_read read;
+        read.methylation=methylation;
+        read.methylation_probability=methylation_probability;
+        read.methylation_position_A=methylation_position_A;
+        read.methylation_position_C=methylation_position_C;
         if (read_seq.length() > 0) {
             read.query_name = query_name;
             read.pos = pos_start;
